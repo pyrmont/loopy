@@ -33,7 +33,12 @@
                         # references middleware.janet's `middleware`
                         :embedded ["lib/middleware.janet"
                                    "lib/server.janet"]
-                        # -I lets src/loopy.c find mongoose.h under deps/
+                        # -I lets src/loopy.c find mongoose.h under deps/.
+                        # glibc hides alloca and struct ip_mreq, both of
+                        # which Mongoose uses, unless _DEFAULT_SOURCE is
+                        # set: the build compiles as c99, and glibc reads
+                        # __STRICT_ANSI__ as a request for neither.
                         :cflags {:common ["-DMG_TLS=MG_TLS_BUILTIN"
-                                          "-Ideps/mongoose"]}}]
+                                          "-Ideps/mongoose"]
+                                 :posix ["-D_DEFAULT_SOURCE"]}}]
              :scripts []}}

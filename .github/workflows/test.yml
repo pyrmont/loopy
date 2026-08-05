@@ -47,7 +47,7 @@ jobs:
       run: tar -xzf janet-${{ steps.janet-ver.outputs.tag }}-linux-x64.tar.gz --strip-components=2 -C $PREFIX
       shell: bash
     - name: "build native library"
-      run: janet -e '(import ./bundle) (bundle/build (table :info (-> (slurp "info.jdn") parse)))'
+      run: janet -e '(import ./bundle) (bundle/build (table :info (-> (slurp `info.jdn`) parse)))'
       shell: bash
     - name: "run tests"
       run: 'for f in test/*.janet; do janet "$f" || { rc=$?; break; }; done; (exit ${rc:-0})'
@@ -89,7 +89,7 @@ jobs:
       run: tar -xzf janet-${{ steps.janet-ver.outputs.tag }}-macos-aarch64.tar.gz --strip-components=2 -C $PREFIX
       shell: bash
     - name: "build native library"
-      run: janet -e '(import ./bundle) (bundle/build (table :info (-> (slurp "info.jdn") parse)))'
+      run: janet -e '(import ./bundle) (bundle/build (table :info (-> (slurp `info.jdn`) parse)))'
       shell: bash
     - name: "run tests"
       run: 'for f in test/*.janet; do janet "$f" || { rc=$?; break; }; done; (exit ${rc:-0})'
@@ -133,11 +133,22 @@ jobs:
         echo JANET_MANPATH=C:\Program Files\Janet\docs>>%GITHUB_ENV%
         echo JANET_PATH=C:\Program Files\Janet\Library>>%GITHUB_ENV%
       shell: cmd
-    # bash rather than cmd for the remaining steps: the build expression
-    # mixes single and double quotes, which cmd cannot express.
+    # Spork looks for vcvarsall.bat in the install locations of Visual
+    # Studio 2017, 2019 and 2022, and the runner image carries 2026. It
+    # skips that search entirely when INCLUDE, LIB and LIBPATH are already
+    # set, so the environment is prepared here instead, locating whatever
+    # version is present with Microsoft's own vswhere. The build has to run
+    # in the same invocation for the environment to survive.
+    #
+    # The Janet expression uses backtick strings so that it carries no
+    # double quotes of its own for cmd to swallow.
     - name: "build native library"
-      run: janet -e '(import ./bundle) (bundle/build (table :info (-> (slurp "info.jdn") parse)))'
-      shell: bash
+      run: |
+        for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath`) do set "VSPATH=%%i"
+        if not defined VSPATH exit /b 1
+        call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
+        janet -e "(import ./bundle) (bundle/build (table :info (-> (slurp `info.jdn`) parse)))"
+      shell: cmd
     - name: "run tests"
       run: 'for f in test/*.janet; do janet "$f" || { rc=$?; break; }; done; (exit ${rc:-0})'
       shell: bash
