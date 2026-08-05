@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: "checkout project"
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
     - name: "find latest version of janet"
       uses: oprypin/find-latest-tag@v1
       with:
@@ -61,7 +61,7 @@ jobs:
     runs-on: macos-latest
     steps:
     - name: "checkout project"
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
     - name: "find latest version of janet"
       uses: oprypin/find-latest-tag@v1
       with:
@@ -106,7 +106,7 @@ jobs:
       run: git config --global core.autocrlf false
       shell: cmd
     - name: "checkout project"
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
     - name: "find latest version of janet"
       uses: oprypin/find-latest-tag@v1
       with:
@@ -151,6 +151,20 @@ jobs:
         call "%VSPATH%\VC\Auxiliary\Build\vcvarsall.bat" x64
         janet -e "(import ./bundle) (bundle/build (table :info (-> (slurp `info.jdn`) parse)))"
       shell: cmd
+    # TEMPORARY. The TLS test reports only curl's exit code, because
+    # nothing curl writes reaches the file the test helper redirects it to.
+    # This runs curl directly so its output lands in the log, and reports
+    # which TLS backend it was built against. Uses a port of its own so it
+    # cannot be mistaken for a fixture the suite starts later.
+    - name: "diagnose TLS"
+      run: |
+        curl --version
+        janet res/fixtures/tls-server.janet 8999 sample &
+        SRV=$!
+        sleep 3
+        curl -v -k --max-time 5 https://127.0.0.1:8999/ || echo "curl exited $?"
+        kill $SRV 2>/dev/null || true
+      shell: bash
     - name: "run tests"
       run: 'for f in test/*.janet; do janet "$f" || { rc=$?; break; }; done; (exit ${rc:-0})'
       shell: bash
