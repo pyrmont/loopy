@@ -1,1 +1,4 @@
-build
+/.jeep/
+/_build/
+/_system/
+.DS_Store

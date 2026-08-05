@@ -1,156 +1,248 @@
-# Circlet
+# Loopy
 
-Circlet is an HTTP and networking library for the
-[janet](https://github.com/janet-lang/janet) language.
-It provides an abstraction out of the box like Clojure's
-[ring](https://github.com/ring-clojure/ring), which is a server abstraction
-that makes it easy to build composable web applications.
+[![Test Status][icon]][status]
 
-Circlet uses [mongoose](https://cesanta.com/) as the underlying HTTP server
-engine. Mongoose is a portable, low footprint, event based server library. The
-flexible build system requirements of mongoose make it very easy to embed
-in other C programs and libraries.
+[icon]: https://github.com/pyrmont/loopy/workflows/test/badge.svg
+[status]: https://github.com/pyrmont/loopy/actions?query=workflow%3Atest
 
-## Installing
+Loopy is an HTTP and WebSocket server for the [Janet][] programming language.
 
-You can add Circlet as a dependency in your `project.janet`:
+[Janet]: https://janet-lang.org
 
-```clojure
-(declare-project
-  :name "web framework" :description "A framework for web development"
-  :dependencies ["https://github.com/janet-lang/circlet.git"])
+Loopy is a fork of [Circlet][]. It wraps Mongoose 7, updated for Mongoose's
+new connection API, and reworks WebSockets so that any route can upgrade a
+request rather than needing a dedicated listener. It can also serve over TLS
+without any external dependencies.
+
+[Circlet]: https://github.com/janet-lang/circlet
+[Mongoose]: https://mongoose.ws
+
+## Library
+
+### Installation
+
+Add the dependency to your `info.jdn` file:
+
+```janet
+  :dependencies ["https://github.com/pyrmont/loopy"]
 ```
 
-You can also install it system-wide with `jpm`:
+### Usage
 
+The simplest server is a handler and a port:
+
+```janet
+(import loopy)
+
+(defn hello [req]
+  {:status 200
+   :headers {"Content-Type" "text/html"}
+   :body "<!doctype html><html><body><h1>Hello.</h1></body></html>"})
+
+(loopy/server hello 8000)
 ```
-sh jpm install circlet
+
+`(loopy/server handler port &opt address)` binds, listens and polls forever.
+The address defaults to `127.0.0.1`; use `0.0.0.0` to listen on every
+interface.
+
+For anything beyond a single listener, drive the event loop yourself. A
+manager owns the connections and `poll` advances them, blocking for at most
+the given number of milliseconds:
+
+```janet
+(def mgr (loopy/manager))
+(loopy/add-server mgr hello "0.0.0.0:8000")
+(forever (loopy/poll mgr 2000))
 ```
 
-## Usage
+### Requests
 
-### Creating a server
+A handler receives a table describing the request:
 
-You can create a HTTP server using the `circlet/server` function. The
-function is of the form `(circlet/server handler port &opt ip-address)`
-and takes the following parameters:
+| Key             | Value                                     |
+| --------------- | ----------------------------------------- |
+| `:uri`          | the requested path                        |
+| `:method`       | the HTTP method, as a string              |
+| `:protocol`     | the HTTP version used                     |
+| `:headers`      | a table of header names to values         |
+| `:body`         | the request body                          |
+| `:query-string` | the query string, without the leading `?` |
+| `:connection`   | the underlying connection                 |
 
-- `handler` function that takes the incoming HTTP request object (explained in
-    greater detail below) and returns the HTTP response object.
-- `port` number of the port on which the server will listen for incoming
-    requests.
-- `ip-address` optional string representing the IP address on which the server
-    will listen (defaults to `“127.0.0.1”`). The address `“*”` will
-    cause the server to listen on all available IP addresses.
+A header sent more than once appears as an array of its values.
 
-The server runs immediately after creation.
+### Responses
 
-### Request
+A handler returns a table or struct. Every key is optional and `:status`
+defaults to 200:
 
-The `handler` function takes a single parameter representing the request. The
-request is a Janet table containing all the information about the request. It
-contains the following keys:
+```janet
+{:status 200
+ :headers {"Content-Type" "text/plain"}
+ :body "Hello."}
+```
 
-- `:uri` requested URI
-- `:method` HTTP method of the request as a Janet string (e.g. "GET", "POST")
-- `:protocol` version of the HTTP protocol used for request
-- `:headers` HTTP headers sent with the request as a Janet table. Keys in this
-    table are Janet strings with standard header's name (e.g. "Host", “Accept").
-    Values are the values in the HTTP header.
-- `:body` body of the HTTP request
-- `:query-string` query string part of the requested URI
-- `:connection` internal mongoose connection serving this request
+A header whose value is an array is written once per element, which is how
+you send several `Set-Cookie` headers.
 
-### Response
+Setting `:kind` serves from the filesystem instead:
 
-The return value of the `handler` function must be a Janet table containing
-at least the `status` key with an integer value that corresponds to the HTTP
-status of the response (e.g. 200 for success).
+- `{:kind :file :file "README.md" :mime "text/plain"}` sends a single file.
+  The `:mime` key is optional.
+- `{:kind :static :root "."}` serves a directory.
 
-Other possible keys include:
-
-- `:body` the body of the HTTP response (e.g. a string in HTML or JSON)
-- `:headers` a Janet table or struct with standard HTTP headers. The structure
-    is the same as the HTTP request case described above.
-
-There is also special key `:kind` you can use. There are two possible values for
-this key:
-
-- `:file` for serving a file from the filesystem. The filename is specified by
-    the `:file` key. You can specify `:mime` key with value of corresponding
-    mime type, it defaults to text/html.
-- `:static` for serving static file from the filesystem. You have to provide
-    `:root` key with value of the path you want to serve.
+Both are handled by Mongoose directly. Unlike an ordinary response, they
+leave the connection open for reuse, so a client should frame its read on
+`Content-Length` rather than waiting for the connection to close.
 
 ### Middleware
 
-Circlet also allows for the creation of different “middleware”. Pieces
-of middleware can be thought of as links in a chain of functions that are
-used to consume the HTTP request. The `handler` function can be thought of
-as a piece of middleware and other middleware should match the signature and
-return type of the `handler` function, i.e. accept and return a Janet table.
+Middleware is any function taking a request and returning a response, so
+handlers and middleware are the same shape and compose freely.
+`(loopy/middleware x)` coerces a value into that shape, wrapping a constant
+so it can be used wherever a function is expected.
 
-Middleware can be created in one of two ways. A user can define a function
-with the appropriate signature and return type or use Circlet’s
-`circlet/middleware` function to coerce an argument into a piece of
-middleware. Middleware pieces are often higher-order functions (meaning
-that they return another function). This allows for parameterization at
-creation time.
+Three pieces are provided:
 
-#### Provided middleware
+- `(loopy/router routes)` dispatches on `:uri`. Keys are path strings, and
+  the value under `:default` handles anything unmatched. Without a
+  `:default`, an unmatched path yields a 404.
+- `(loopy/logger nextmw)` prints each request and how long it took.
+- `(loopy/cookies nextmw)` parses the `Cookie` header into a table under
+  `:cookies`.
 
-There are three basic pieces of middleware provided by Circlet:
+They compose with `->`, applied left to right:
 
-- `(circlet/router routes)` simple routing facility. This function takes a
-    Janet table containing the routes. Each key should be a Janet string matching
-    a URI (e.g. `”/“`, `”/posts"`) with a value that is a function of the
-    same form as the `handler` function described above.
-- `(circlet/logger nextmw)` simple logging facility. This function prints
-    the request info on `stdout`. The only argument is the next middleware.
-- `(circlet/cookies nextmw)` middleware which extracts the cookies from the
-    HTTP header and stores the value under the `:cookies` key in the request
-    object.
-
-## Example
-
-The below example starts a very simple web server on port 8000.
-
-```clojure
-(import circlet)
-
-(defn myserver
- "A simple HTTP server" [request]
- {:status 200
-  :headers {"Content-Type" "text/html"} :body "<!doctype html><html><body><h1>Hello.</h1></body></html>"})
-
-(circlet/server myserver 8000)
+```janet
+(loopy/add-server mgr (-> routes loopy/router loopy/logger) "0.0.0.0:8000")
 ```
+
+### WebSockets
+
+A route upgrades a request by calling `(loopy/websocket handler req)`. The
+handler is then invoked for each event on that connection, and the connection
+stays open between messages:
+
+```janet
+(defn echo [msg]
+  (when (= :message (msg :event))
+    (loopy/message (msg :connection) (msg :data))))
+
+(def routes
+  {"/websocket" (fn [req] (loopy/websocket echo req))
+   :default {:status 404}})
+```
+
+An event is a table with `:event`, `:connection` and `:protocol`. A
+`:message` event also carries `:data` and a `:data-type` of `:text` or
+`:binary`. Other events include `:close`, `:ping` and `:pong`.
+
+`(loopy/message conn data &opt data-type)` sends a message, defaulting to
+`:text`. Pass `:binary` to send binary frames.
+
+Because one manager serves both, HTTP routes and WebSocket routes live in the
+same routing table and share a single `poll` loop.
+
+### TLS
+
+The fourth argument to `add-server` enables TLS. Pass `true` to use the
+built-in certificate, which is Mongoose's sample pair and is suitable only
+for local testing:
+
+```janet
+(loopy/add-server mgr handler "0.0.0.0:8443" true)
+```
+
+Pass a table or struct with `:cert` and `:key` to serve your own. Both hold
+PEM data rather than paths, and either a string or a buffer will do:
+
+```janet
+(loopy/add-server mgr handler "0.0.0.0:8443"
+                  {:cert (slurp "cert.pem") :key (slurp "key.pem")})
+```
+
+The TLS stack is built into Mongoose and needs no external library, but it
+speaks only ECDSA over secp256r1. An RSA key will not load. Generate a
+suitable keypair with:
+
+```sh
+openssl ecparam -name prime256v1 -genkey -noout -out key.pem
+openssl req -x509 -new -key key.pem -days 365 -subj /CN=localhost \
+  -addext subjectAltName=DNS:localhost -out cert.pem
+```
+
+### Random numbers
+
+TLS needs a cryptographic source of randomness for key material. Mongoose's
+own `mg_random` reads `/dev/urandom` on Unix, but leaves its Windows branch
+empty and falls through to `rand()`, which is not such a source.
+
+Loopy therefore supplies its own. Mongoose wraps its implementation in
+`#if MG_ENABLE_CUSTOM_RANDOM`, so building with
+`-DMG_ENABLE_CUSTOM_RANDOM=1` (one of Mongoose's [build options][mg-build])
+compiles that version out and leaves the symbol for the embedding program to
+define. Loopy defines `mg_random` in `src/loopy.c`, reading `/dev/urandom`
+on Unix and calling [`rand_s`][rand-s] on Windows. `rand_s` wraps
+`RtlGenRandom` and needs no additional library, unlike `BCryptGenRandom`
+or `CryptGenRandom`.
+
+There is no fallback. If the system cannot supply randomness, Loopy aborts
+rather than emit a key derived from a weak source.
+
+Note that the Windows branch has not yet been built or run on Windows. The
+mechanism itself is covered by the test suite, which exercises the Unix
+branch on every TLS handshake.
+
+[mg-build]: https://mongoose.ws/documentation/#build-options
+[rand-s]: https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/rand-s
 
 ## Development
 
 ### Building
 
-Building requires [Janet](https://github.com/janet-lang/janet) to be installed
-on the system, as well as the `jpm` tool (installed by default with Janet).
+Building requires Janet and [jeep][]:
 
 ```sh
-jpm build
+jeep build
 ```
 
-You can also just run `jpm` to see a list of possible build commands.
+The compiled module is written to `_build/release`.
+
+[jeep]: https://github.com/pyrmont/jeep
 
 ### Testing
 
-Run a server on localhost with the following command
+The tests exercise a real server over a socket, so the module must be built
+first:
 
 ```sh
-jpm test
+jeep build
+jeep test
 ```
 
-This example is more involved, and shows all the functionality described in this
-document.
+`res/tools/test.html` is a browser client for exercising the WebSocket
+handler by hand. Serve the test fixture on port 8000 and open the file:
 
-## License
+```sh
+janet res/fixtures/server.janet 8000
+```
 
-Unlike [janet](https://github.com/janet-lang/janet), Circlet is licensed
-under the GPL license in accordance with mongoose.
+## Bugs
+
+Found a bug? I'd love to know about it. The best way is to report your bug in
+the [Issues][] section on GitHub.
+
+[Issues]: https://github.com/pyrmont/loopy/issues
+
+## Credits
+
+Loopy is a fork of [Circlet][], written by Calvin Rose and contributors. It
+embeds [Mongoose][], written by Sergey Lyubka and Cesanta Software.
+
+## Licence
+
+Loopy is licensed under the GPL-2.0-only Licence. See [LICENSE][] for more
+details.
+
+[LICENSE]: https://github.com/pyrmont/loopy/blob/master/LICENSE

@@ -1,0 +1,43 @@
+{:name "loopy"
+ :version "DEVEL"
+ :description "An HTTP and WebSocket server for Janet"
+ :author "Michael Camilleri"
+ :license "GPL-2.0-only"
+ :url "https://github.com/pyrmont/loopy"
+ :repo "git+https://github.com/pyrmont/loopy.git"
+ :dependencies []
+ :vendored [{:name "mongoose"
+             :url "https://github.com/cesanta/mongoose"
+             # Pinned: Mongoose is GPL-2.0-only and determines this
+             # bundle's licence, so upgrades must be deliberate
+             :tag "7.13"
+             :prefix "deps/mongoose"
+             :paths ["mongoose.c"
+                     "mongoose.h"
+                     "LICENSE"]}
+            {:name "testament"
+             :url "https://github.com/pyrmont/testament"
+             :prefix "deps/testament"
+             :paths ["lib/testament.janet"
+                     "init.janet"
+                     "LICENSE"]}]
+ :artifacts {:executables []
+             :libraries []
+             :manpages []
+             :natives [{:name "loopy"
+                        # Our binding code; Mongoose is vendored third
+                        # party code and lives under deps/
+                        :files ["src/loopy.c"
+                                "deps/mongoose/mongoose.c"]
+                        # middleware must precede server: server.janet
+                        # references middleware.janet's `middleware`
+                        :embedded ["lib/middleware.janet"
+                                   "lib/server.janet"]
+                        # -I lets src/loopy.c find mongoose.h under deps/.
+                        # MG_ENABLE_CUSTOM_RANDOM compiles out Mongoose's
+                        # mg_random, whose Windows branch is empty and
+                        # falls back to rand(); src/loopy.c supplies one.
+                        :cflags {:common ["-DMG_TLS=MG_TLS_BUILTIN"
+                                          "-DMG_ENABLE_CUSTOM_RANDOM=1"
+                                          "-Ideps/mongoose"]}}]
+             :scripts []}}
