@@ -74,20 +74,29 @@
 # malformed case is what pins that down: if :cert were ignored, the built-in
 # pair would answer and the handshake would succeed.
 
-(deftest serves-tls-with-supplied-credentials
-  (def server (h/start-tls-server "sample"))
-  (defer (h/stop-server server)
-    (def [code body] (h/https-get "/"))
-    (is (= 0 code))
-    (is (= "tls ok" body))))
+# These are skipped on Windows, where curl is built against Schannel.
+# Mongoose's built-in TLS accepts only an x25519 key share and implements
+# no HelloRetryRequest, so it cannot ask a client offering another group to
+# try again: it rejects the client hello outright. Schannel offers another
+# group, so no handshake between the two can succeed. That is a limitation
+# of the TLS stack rather than of the tests, and it is described in the
+# README.
+(unless (= :windows (os/which))
 
-(deftest fails-the-handshake-on-malformed-credentials
-  (def server (h/start-tls-server "bad"))
-  (defer (h/stop-server server)
-    (def [code _] (h/https-get "/" h/tls-bad-port))
-    # 35 is curl's SSL connect error; 0 would mean the built-in pair answered
-    (is (not= 0 code))
-    (is (= 35 code))))
+  (deftest serves-tls-with-supplied-credentials
+    (def server (h/start-tls-server "sample"))
+    (defer (h/stop-server server)
+      (def [code body] (h/https-get "/"))
+      (is (= 0 code))
+      (is (= "tls ok" body))))
+
+  (deftest fails-the-handshake-on-malformed-credentials
+    (def server (h/start-tls-server "bad"))
+    (defer (h/stop-server server)
+      (def [code _] (h/https-get "/" h/tls-bad-port))
+      # 35 is curl's SSL connect error; 0 would mean the built-in pair answered
+      (is (not= 0 code))
+      (is (= 35 code)))))
 
 
 # The remaining cases never reach a bind: credentials are validated before

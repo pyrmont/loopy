@@ -172,6 +172,16 @@ openssl req -x509 -new -key key.pem -days 365 -subj /CN=localhost \
   -addext subjectAltName=DNS:localhost -out cert.pem
 ```
 
+Being minimal, that stack is also selective about who it will talk to. It
+accepts only an x25519 key share, and implements no HelloRetryRequest, so a
+client whose first key share names another group is rejected rather than
+asked to try again. Browsers are unaffected, since Chrome, Edge and Firefox
+all offer x25519 first, but **Windows clients built on Schannel cannot
+connect** — that includes `curl` on Windows, WinHTTP, and .NET's
+`HttpClient`. If you need to serve those, build against a full TLS library
+by setting `MG_TLS` to `MG_TLS_OPENSSL` or `MG_TLS_MBED`, which trades the
+absence of external dependencies for interoperability.
+
 ### Random numbers
 
 TLS needs a cryptographic source of randomness for key material, and

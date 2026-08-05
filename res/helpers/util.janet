@@ -145,7 +145,9 @@
   (def out-path (string "_build/curl-" listen-port ".out"))
   (def out (os/open out-path :wct))
   (def url (string "https://" host ":" listen-port path))
-  (def [ok? proc] (protect (os/spawn ["curl" "-sk" "-m" "5" url] :p {:out out :err out})))
+  # -S so that curl still reports why it failed: -s alone silences the
+  # message as well as the progress meter, which leaves a bare exit code.
+  (def [ok? proc] (protect (os/spawn ["curl" "-sSk" "-m" "5" url] :p {:out out :err out})))
   (unless ok?
     (:close out)
     (error "curl is needed to test TLS but could not be run"))
