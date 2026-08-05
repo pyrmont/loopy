@@ -46,10 +46,14 @@
   so a server cannot share a thread with the test client.
   ```
   [args listen-port]
-  # Send the fixture's output to a temporary file rather than discarding
-  # it, so a startup failure can be reported. A file is used in preference
-  # to a pipe because nothing drains it while the tests run.
-  (def log (file/temp))
+  # Send the fixture's output to a file rather than discarding it, so a
+  # startup failure can be reported. A file is used in preference to a pipe
+  # because nothing drains it while the tests run, and it is opened with
+  # os/open rather than file/temp because Windows will not redirect a
+  # spawned process to the latter. The name carries the port so that two
+  # fixtures can be running at once.
+  (def log-path (string "_build/fixture-" listen-port ".log"))
+  (def log (os/open log-path :wct))
   (def proc (os/spawn args :p {:out log :err log}))
   # Poll the port rather than sleeping a fixed interval
   (var ready? false)
@@ -60,10 +64,11 @@
       (do (:close conn) (set ready? true))
       (os/sleep 0.05))
     (++ tries))
+  # The child keeps its own handle, so this only drops the parent's copy
+  (:close log)
   (unless ready?
     (protect (os/proc-kill proc true))
-    (file/seek log :set 0)
-    (errorf "fixture server did not start:\n%s" (or (file/read log :all) "")))
+    (errorf "fixture server did not start:\n%s" (string (or (slurp log-path) ""))))
   proc)
 
 (defn start-server
@@ -135,14 +140,18 @@
   ```
   [path &opt listen-port]
   (default listen-port tls-port)
-  (def out (file/temp))
+  # As in spawn-fixture, a file opened with os/open rather than file/temp:
+  # Windows will not redirect a spawned process to the latter.
+  (def out-path (string "_build/curl-" listen-port ".out"))
+  (def out (os/open out-path :wct))
   (def url (string "https://" host ":" listen-port path))
   (def [ok? proc] (protect (os/spawn ["curl" "-sk" "-m" "5" url] :p {:out out :err out})))
   (unless ok?
+    (:close out)
     (error "curl is needed to test TLS but could not be run"))
   (def code (os/proc-wait proc))
-  (file/seek out :set 0)
-  [code (string (or (file/read out :all) ""))])
+  (:close out)
+  [code (string (or (slurp out-path) ""))])
 
 (defn ws-connect
   ```
