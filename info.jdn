@@ -10,7 +10,7 @@
              :url "https://github.com/cesanta/mongoose"
              # Pinned: Mongoose is GPL-2.0-only and determines this
              # bundle's licence, so upgrades must be deliberate
-             :tag "7.13"
+             :tag "7.22"
              :prefix "deps/mongoose"
              :paths ["mongoose.c"
                      "mongoose.h"
@@ -33,11 +33,7 @@
                         # references middleware.janet's `middleware`
                         :embedded ["lib/middleware.janet"
                                    "lib/server.janet"]
-                        # -I lets src/loopy.c find mongoose.h under deps/.
-                        # MG_ENABLE_CUSTOM_RANDOM compiles out Mongoose's
-                        # mg_random, whose Windows branch is empty and
-                        # falls back to rand(); src/loopy.c supplies one.
+                        # -I lets src/loopy.c find mongoose.h under deps/
                         :cflags {:common ["-DMG_TLS=MG_TLS_BUILTIN"
-                                          "-DMG_ENABLE_CUSTOM_RANDOM=1"
                                           "-Ideps/mongoose"]}}]
              :scripts []}}

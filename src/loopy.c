@@ -1,12 +1,5 @@
-/* This must come before any include: it is what exposes rand_s in the
- * Windows CRT, and stdlib.h is pulled in indirectly by janet.h. */
-#ifdef _WIN32
-#define _CRT_RAND_S
-#endif
-
 #include <janet.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include "mongoose.h"
 
@@ -15,56 +8,6 @@
  ******************************************************************************/
 
 /* TLS */
-
-/* Random numbers for the TLS stack.
- *
- * Mongoose's own mg_random() leaves its MG_ARCH_WIN32 branch empty, so on
- * Windows it falls through to rand(), which is not a cryptographic source.
- * Building with -DMG_ENABLE_CUSTOM_RANDOM=1 compiles that function out and
- * leaves the symbol for us to define, so this is what the built-in TLS
- * stack draws key material from.
- *
- * Because the definition replaces Mongoose's for every platform, the POSIX
- * branch reimplements what Mongoose already does. That is deliberate: it
- * means the mechanism is exercised by the test suite here rather than only
- * on Windows, where nothing we can run would compile it.
- *
- * There is no fallback. Silently degrading to a weak source is the bug
- * being fixed, and a server that cannot generate key material has nothing
- * safe to do, so failure aborts rather than raising: unwinding out of
- * mg_mgr_poll would leave Mongoose's connection list in an unknown state. */
-
-void mg_random(void *buf, size_t len) {
-#ifdef _WIN32
-    /* rand_s is the Windows CRT's CSPRNG. It wraps RtlGenRandom and needs
-     * no extra library, unlike BCryptGenRandom (bcrypt.lib) or
-     * CryptGenRandom (advapi32.lib). */
-    unsigned char *p = (unsigned char *)buf;
-    while (len > 0) {
-        unsigned int v;
-        size_t n = len < sizeof(v) ? len : sizeof(v);
-        if (0 != rand_s(&v)) {
-            fprintf(stderr, "loopy: rand_s failed, cannot generate key material\n");
-            abort();
-        }
-        memcpy(p, &v, n);
-        p += n;
-        len -= n;
-    }
-#else
-    FILE *fp = fopen("/dev/urandom", "rb");
-    if (NULL == fp) {
-        fprintf(stderr, "loopy: could not open /dev/urandom\n");
-        abort();
-    }
-    size_t got = fread(buf, 1, len, fp);
-    fclose(fp);
-    if (got != len) {
-        fprintf(stderr, "loopy: short read from /dev/urandom\n");
-        abort();
-    }
-#endif
-}
 
 static const char *s_tls_cert =
     "-----BEGIN CERTIFICATE-----\n"
@@ -325,7 +268,7 @@ static mg_str_t janet2mg_str(Janet x) {
 }
 
 static Janet mg2janet_str(mg_str_t str) {
-    return janet_stringv((const uint8_t *)(str.ptr), str.len);
+    return janet_stringv((const uint8_t *)(str.buf), str.len);
 }
 
 static Janet mg2janet_hm(mg_connection_t *c, mg_http_message_t *hm) {
@@ -374,7 +317,7 @@ static Janet mg2janet_wm(mg_connection_t *c, Janet event, mg_ws_message_t *wm) {
     JanetTable *result;
     if (wm) {
         result = janet_table(5);
-        janet_table_put(result, janet_ckeywordv("data"), janet_stringv((const uint8_t *)(wm->data.ptr), wm->data.len));
+        janet_table_put(result, janet_ckeywordv("data"), janet_stringv((const uint8_t *)(wm->data.buf), wm->data.len));
         if ((wm->flags & 0x0F) == WEBSOCKET_OP_TEXT) {
             janet_table_put(result, janet_ckeywordv("data-type"), janet_ckeywordv("text"));
         } else {
@@ -535,7 +478,7 @@ static void event_handler(mg_connection_t *c, int ev, void *p) {
         case MG_EV_WS_MSG: {
             mg_ws_message_t *wm = (mg_ws_message_t *)p;
             evdata = mg2janet_wm(c, janet_ckeywordv("message"), wm);
-            printf("Websocket message: %s\n", wm->data.ptr);
+            printf("Websocket message: %s\n", wm->data.buf);
             break;
         }
 
@@ -714,7 +657,7 @@ static Janet cfun_send_ws(int32_t argc, Janet *argv) {
         int op = (janet_keyeq(x, "text")) ? WEBSOCKET_OP_TEXT : WEBSOCKET_OP_BINARY;
         x = janet_dictionary_get(d.kvs, d.cap, janet_ckeywordv("data"));
         mg_str_t msg = janet2mg_str(x);
-        mg_ws_send(cw->conn, msg.ptr, msg.len, op);
+        mg_ws_send(cw->conn, msg.buf, msg.len, op);
     // } else if (janet_keyeq(x, "continue")) {
     // } else if (janet_keyeq(x, "close")) {
     // } else if (janet_keyeq(x, "ping")) {
@@ -786,6 +729,12 @@ extern const unsigned char *lib___server_embed;
 extern size_t lib___server_embed_size;
 
 JANET_MODULE_ENTRY(JanetTable *env) {
+    /* Set the log level rather than inherit Mongoose's default, which is
+     * not stable across releases: 7.13 defaulted to MG_LL_INFO and 7.22 to
+     * MG_LL_DEBUG, which prints a line on every connection close. Errors
+     * are kept because cfun_bind reads a failed listen out of this stream. */
+    mg_log_set(MG_LL_ERROR);
+
     janet_cfuns(env, "loopy", cfuns);
     /* Both files are evaluated into the same environment, so order
      * matters: server.janet calls middleware.janet's `middleware`. */

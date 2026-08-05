@@ -174,28 +174,19 @@ openssl req -x509 -new -key key.pem -days 365 -subj /CN=localhost \
 
 ### Random numbers
 
-TLS needs a cryptographic source of randomness for key material. Mongoose's
-own `mg_random` reads `/dev/urandom` on Unix, but leaves its Windows branch
-empty and falls through to `rand()`, which is not such a source.
+TLS needs a cryptographic source of randomness for key material, and
+Mongoose's `mg_random` supplies it: `/dev/urandom` on Unix, `rand_s` on
+Windows, and a platform source on ESP32, Zephyr, PicoSDK and STM32 CUBE.
+Where none is available it logs a warning and falls back to `rand()`, which
+is not a cryptographic source.
 
-Loopy therefore supplies its own. Mongoose wraps its implementation in
-`#if MG_ENABLE_CUSTOM_RANDOM`, so building with
+If that fallback is unacceptable for your deployment, Mongoose wraps its
+implementation in `#if MG_ENABLE_CUSTOM_RANDOM`, so building with
 `-DMG_ENABLE_CUSTOM_RANDOM=1` (one of Mongoose's [build options][mg-build])
-compiles that version out and leaves the symbol for the embedding program to
-define. Loopy defines `mg_random` in `src/loopy.c`, reading `/dev/urandom`
-on Unix and calling [`rand_s`][rand-s] on Windows. `rand_s` wraps
-`RtlGenRandom` and needs no additional library, unlike `BCryptGenRandom`
-or `CryptGenRandom`.
-
-There is no fallback. If the system cannot supply randomness, Loopy aborts
-rather than emit a key derived from a weak source.
-
-Note that the Windows branch has not yet been built or run on Windows. The
-mechanism itself is covered by the test suite, which exercises the Unix
-branch on every TLS handshake.
+compiles it out and leaves `bool mg_random(void *buf, size_t len)` for the
+embedding program to define.
 
 [mg-build]: https://mongoose.ws/documentation/#build-options
-[rand-s]: https://learn.microsoft.com/en-us/cpp/c-runtime-library/reference/rand-s
 
 ## Development
 
