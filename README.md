@@ -198,6 +198,12 @@ embedding program to define.
 
 [mg-build]: https://mongoose.ws/documentation/#build-options
 
+## API
+
+Documentation for Loopy's API is in [api.md][api].
+
+[api]: https://github.com/pyrmont/loopy/blob/master/api.md
+
 ## Development
 
 ### Building
