@@ -1,4 +1,5 @@
-# Build files are vendored from Spork by `jeep prep build`
+# Build files are vendored from Spork by `jeep prep build`, which copies
+# them from Jeep's own deps, patches included.
 (import ./spork/build-rules :as br)
 (import ./spork/cc :as cc)
 (import ./spork/declare-cc :as declare)
