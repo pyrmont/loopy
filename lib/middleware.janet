@@ -3,7 +3,7 @@
 # It is evaluated before lib/server.janet, which depends on `middleware`.
 
 (defn middleware
-  "Coerce any type to http middleware"
+  "Coerces any type to HTTP middleware"
   [x]
   (case (type x)
     :function x

@@ -559,7 +559,7 @@ static void log_char(char c, void *p) {
 
 JANET_FN(cfun_bind,
          "(bind manager url handler tls)",
-         "Bind manager to url and dispatch HTTP requests to handler. tls may "
+         "Binds a manager to a URL and dispatches HTTP requests to a handler. tls may "
          "be false for plain HTTP, true for TLS with built-in credentials, or "
          "a table or struct containing :cert and :key PEM data. Returns manager.") {
     janet_fixarity(argc, 4);
@@ -635,7 +635,7 @@ JANET_FN(cfun_bind,
 
 JANET_FN(cfun_manager,
          "(manager)",
-         "Create and initialise an HTTP server manager. Returns the manager.") {
+         "Creates and initialises an HTTP server manager. Returns the manager.") {
     (void) argv;
     janet_fixarity(argc, 0);
     void *mgr = janet_abstract(&loopy_manager_abstract, sizeof(mg_mgr_t));
@@ -645,7 +645,7 @@ JANET_FN(cfun_manager,
 
 JANET_FN(cfun_poll,
          "(poll manager milliseconds)",
-         "Poll manager for events for up to milliseconds. Returns manager.") {
+         "Polls a manager for events for up to milliseconds. Returns manager.") {
     janet_fixarity(argc, 2);
     mg_mgr_t *mgr = janet_getabstract(argv, 0, &loopy_manager_abstract);
     int32_t wait = janet_getinteger(argv, 1);
@@ -655,7 +655,7 @@ JANET_FN(cfun_poll,
 
 JANET_FN(cfun_send_ws,
          "(send-ws message)",
-         "Send a WebSocket message described by a table or struct. message "
+         "Sends a WebSocket message described by a table or struct. message "
          "must contain :connection, :event :message, :data-type :text or "
          ":binary, and string :data. Returns nil.") {
     janet_fixarity(argc, 1);
@@ -682,7 +682,7 @@ JANET_FN(cfun_send_ws,
 
 JANET_FN(cfun_upgrade_ws,
          "(upgrade-websocket connection request handler)",
-         "Upgrade an HTTP connection and request to a WebSocket handled by "
+         "Upgrades an HTTP connection and request to a WebSocket handled by "
          "handler. Returns connection.") {
     janet_fixarity(argc, 3);
     loopy_connection_t *cw = janet_getabstract(argv, 0, &loopy_connection_abstract);

@@ -30,7 +30,7 @@ suitable for anything but local testing.
 (bind manager url handler tls)
 ```
 
-Bind manager to url and dispatch HTTP requests to handler. tls may be false for plain HTTP, true for TLS with built-in credentials, or a table or struct containing :cert and :key PEM data. Returns manager.
+Binds a manager to a URL and dispatches HTTP requests to a handler. tls may be false for plain HTTP, true for TLS with built-in credentials, or a table or struct containing :cert and :key PEM data. Returns manager.
 
 [2]: src/loopy.c#L564
 
@@ -69,7 +69,7 @@ Creates a logging middleware. nextmw parameter is the handler function  of the n
 (manager)
 ```
 
-Create and initialise an HTTP server manager. Returns the manager.
+Creates and initialises an HTTP server manager. Returns the manager.
 
 [5]: src/loopy.c#L638
 
@@ -95,7 +95,7 @@ Sends a message to a websocket connection
 (middleware x)
 ```
 
-Coerce any type to http middleware
+Coerces any type to HTTP middleware
 
 [7]: lib/middleware.janet#L5
 
@@ -108,7 +108,7 @@ Coerce any type to http middleware
 (poll manager milliseconds)
 ```
 
-Poll manager for events for up to milliseconds. Returns manager.
+Polls a manager for events for up to milliseconds. Returns manager.
 
 [8]: src/loopy.c#L648
 
@@ -134,7 +134,7 @@ Creates a router middleware. Route parameter must be table or struct  where keys
 (send-ws message)
 ```
 
-Send a WebSocket message described by a table or struct. message must contain :connection, :event :message, :data-type :text or :binary, and string :data. Returns nil.
+Sends a WebSocket message described by a table or struct. message must contain :connection, :event :message, :data-type :text or :binary, and string :data. Returns nil.
 
 [10]: src/loopy.c#L660
 
@@ -164,7 +164,7 @@ address is an optional address the server will listen on.
 (upgrade-websocket connection request handler)
 ```
 
-Upgrade an HTTP connection and request to a WebSocket handled by handler. Returns connection.
+Upgrades an HTTP connection and request to a WebSocket handled by handler. Returns connection.
 
 [12]: src/loopy.c#L686
 
