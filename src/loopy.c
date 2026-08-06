@@ -557,7 +557,11 @@ static void log_char(char c, void *p) {
  * Exposed Functions
  ******************************************************************************/
 
-static Janet cfun_bind(int32_t argc, Janet *argv) {
+JANET_FN(cfun_bind,
+         "(bind manager url handler tls)",
+         "Bind manager to url and dispatch HTTP requests to handler. tls may "
+         "be false for plain HTTP, true for TLS with built-in credentials, or "
+         "a table or struct containing :cert and :key PEM data. Returns manager.") {
     janet_fixarity(argc, 4);
     mg_mgr_t *mgr = janet_getabstract(argv, 0, &loopy_manager_abstract);
     JanetString url = janet_getstring(argv, 1);
@@ -629,7 +633,9 @@ static Janet cfun_bind(int32_t argc, Janet *argv) {
     return argv[0];
 }
 
-static Janet cfun_manager(int32_t argc, Janet *argv) {
+JANET_FN(cfun_manager,
+         "(manager)",
+         "Create and initialise an HTTP server manager. Returns the manager.") {
     (void) argv;
     janet_fixarity(argc, 0);
     void *mgr = janet_abstract(&loopy_manager_abstract, sizeof(mg_mgr_t));
@@ -637,7 +643,9 @@ static Janet cfun_manager(int32_t argc, Janet *argv) {
     return janet_wrap_abstract(mgr);
 }
 
-static Janet cfun_poll(int32_t argc, Janet *argv) {
+JANET_FN(cfun_poll,
+         "(poll manager milliseconds)",
+         "Poll manager for events for up to milliseconds. Returns manager.") {
     janet_fixarity(argc, 2);
     mg_mgr_t *mgr = janet_getabstract(argv, 0, &loopy_manager_abstract);
     int32_t wait = janet_getinteger(argv, 1);
@@ -645,7 +653,11 @@ static Janet cfun_poll(int32_t argc, Janet *argv) {
     return argv[0];
 }
 
-static Janet cfun_send_ws(int32_t argc, Janet *argv) {
+JANET_FN(cfun_send_ws,
+         "(send-ws message)",
+         "Send a WebSocket message described by a table or struct. message "
+         "must contain :connection, :event :message, :data-type :text or "
+         ":binary, and string :data. Returns nil.") {
     janet_fixarity(argc, 1);
     JanetDictView d = janet_getdictionary(argv, 0);
     Janet x;
@@ -668,7 +680,10 @@ static Janet cfun_send_ws(int32_t argc, Janet *argv) {
     return janet_wrap_nil();
 }
 
-static Janet cfun_upgrade_ws(int32_t argc, Janet *argv) {
+JANET_FN(cfun_upgrade_ws,
+         "(upgrade-websocket connection request handler)",
+         "Upgrade an HTTP connection and request to a WebSocket handled by "
+         "handler. Returns connection.") {
     janet_fixarity(argc, 3);
     loopy_connection_t *cw = janet_getabstract(argv, 0, &loopy_connection_abstract);
     JanetDictView d = janet_getdictionary(argv, 1);
@@ -709,15 +724,6 @@ static Janet cfun_upgrade_ws(int32_t argc, Janet *argv) {
  * Environment Registration
  ******************************************************************************/
 
-static const JanetReg cfuns[] = {
-    {"bind", cfun_bind, NULL},
-    {"manager", cfun_manager, NULL},
-    {"poll", cfun_poll, NULL},
-    {"send-ws", cfun_send_ws, NULL},
-    {"upgrade-websocket", cfun_upgrade_ws, NULL},
-    {NULL, NULL, NULL}
-};
-
 /* These symbols are generated from the files named in :embedded in
  * info.jdn. The build derives each name from its path, replacing every
  * path separator with three underscores, so lib/server.janet becomes
@@ -729,13 +735,22 @@ extern const unsigned char *lib___server_embed;
 extern size_t lib___server_embed_size;
 
 JANET_MODULE_ENTRY(JanetTable *env) {
+    JanetRegExt cfuns[] = {
+        JANET_REG("bind", cfun_bind),
+        JANET_REG("manager", cfun_manager),
+        JANET_REG("poll", cfun_poll),
+        JANET_REG("send-ws", cfun_send_ws),
+        JANET_REG("upgrade-websocket", cfun_upgrade_ws),
+        JANET_REG_END
+    };
+
     /* Set the log level rather than inherit Mongoose's default, which is
      * not stable across releases: 7.13 defaulted to MG_LL_INFO and 7.22 to
      * MG_LL_DEBUG, which prints a line on every connection close. Errors
      * are kept because cfun_bind reads a failed listen out of this stream. */
     mg_log_set(MG_LL_ERROR);
 
-    janet_cfuns(env, "loopy", cfuns);
+    janet_cfuns_ext(env, "loopy", cfuns);
     /* Both files are evaluated into the same environment, so order
      * matters: server.janet calls middleware.janet's `middleware`. */
     janet_dobytes(env,
