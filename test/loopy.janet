@@ -81,22 +81,23 @@
 # group, so no handshake between the two can succeed. That is a limitation
 # of the TLS stack rather than of the tests, and it is described in the
 # README.
-(unless (= :windows (os/which))
 
-  (deftest serves-tls-with-supplied-credentials
-    (def server (h/start-tls-server "sample"))
-    (defer (h/stop-server server)
-      (def [code body] (h/https-get "/"))
-      (is (= 0 code))
-      (is (= "tls ok" body))))
+(deftest serves-tls-with-supplied-credentials
+  {:skip-when (= :windows (os/which))}
+  (def server (h/start-tls-server "sample"))
+  (defer (h/stop-server server)
+    (def [code body] (h/https-get "/"))
+    (is (= 0 code))
+    (is (= "tls ok" body))))
 
-  (deftest fails-the-handshake-on-malformed-credentials
-    (def server (h/start-tls-server "bad"))
-    (defer (h/stop-server server)
-      (def [code _] (h/https-get "/" h/tls-bad-port))
-      # 35 is curl's SSL connect error; 0 would mean the built-in pair answered
-      (is (not= 0 code))
-      (is (= 35 code)))))
+(deftest fails-the-handshake-on-malformed-credentials
+  {:skip-when (= :windows (os/which))}
+  (def server (h/start-tls-server "bad"))
+  (defer (h/stop-server server)
+    (def [code _] (h/https-get "/" h/tls-bad-port))
+    # 35 is curl's SSL connect error; 0 would mean the built-in pair answered
+    (is (not= 0 code))
+    (is (= 35 code))))
 
 
 # The remaining cases never reach a bind: credentials are validated before
@@ -139,8 +140,9 @@
 # Run
 
 (def- server (h/start-server))
-# Collect reports rather than letting Testament exit, so the server is
-# always reaped before this process ends.
-(def- reports (run-tests! :no-exit? true))
+(def- reports (run-tests! :no-exit? true)) # collect reports
 (h/stop-server server)
-(os/exit (if (some |(not (empty? (get $ :failures []))) reports) 1 0))
+
+(if (some (fn [r] (not (empty? (r :failures)))) reports)
+  (os/exit 1)
+  (os/exit 0))
